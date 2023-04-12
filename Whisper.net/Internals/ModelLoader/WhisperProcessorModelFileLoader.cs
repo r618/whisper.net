@@ -1,25 +1,27 @@
 // Licensed under the MIT license: https://opensource.org/licenses/MIT
 
+using System;
 using Whisper.net.Native;
 
-namespace Whisper.net.Internals.ModelLoader;
-
-internal sealed class WhisperProcessorModelFileLoader : IWhisperProcessorModelLoader
+namespace Whisper.net.Internals.ModelLoader
 {
-    private readonly string pathModel;
-
-    public WhisperProcessorModelFileLoader(string pathModel)
+    internal sealed class WhisperProcessorModelFileLoader : IWhisperProcessorModelLoader
     {
-        this.pathModel = pathModel;
-    }
+        private readonly string pathModel;
 
-    public void Dispose()
-    {
+        public WhisperProcessorModelFileLoader(string pathModel)
+        {
+            this.pathModel = pathModel;
+        }
 
-    }
+        public void Dispose()
+        {
 
-    public IntPtr LoadNativeContext()
-    {
-        return NativeMethods.whisper_init_from_file_no_state(pathModel);
+        }
+
+        public IntPtr LoadNativeContext()
+        {
+            return NativeMethods.whisper_init_from_file_no_state(pathModel);
+        }
     }
 }

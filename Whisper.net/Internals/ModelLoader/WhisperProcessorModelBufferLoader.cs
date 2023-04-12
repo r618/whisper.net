@@ -1,33 +1,35 @@
 // Licensed under the MIT license: https://opensource.org/licenses/MIT
 
+using System;
 using System.Runtime.InteropServices;
 using Whisper.net.Native;
 
-namespace Whisper.net.Internals.ModelLoader;
-
-internal class WhisperProcessorModelBufferLoader : IWhisperProcessorModelLoader
+namespace Whisper.net.Internals.ModelLoader
 {
-    private readonly byte[] buffer;
-    private readonly GCHandle pinnedBuffer;
-
-    public WhisperProcessorModelBufferLoader(byte[] buffer)
+    internal class WhisperProcessorModelBufferLoader : IWhisperProcessorModelLoader
     {
-        this.buffer = buffer;
-        pinnedBuffer = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-    }
+        private readonly byte[] buffer;
+        private readonly GCHandle pinnedBuffer;
 
-    public void Dispose()
-    {
-        pinnedBuffer.Free();
-    }
-
-    public IntPtr LoadNativeContext()
-    {
-        if (Environment.Is64BitProcess)
+        public WhisperProcessorModelBufferLoader(byte[] buffer)
         {
-            return NativeMethods.whisper_init_from_buffer_no_state_x64(pinnedBuffer.AddrOfPinnedObject(), buffer.Length);
+            this.buffer = buffer;
+            pinnedBuffer = GCHandle.Alloc(buffer, GCHandleType.Pinned);
         }
 
-        return NativeMethods.whisper_init_from_buffer_no_state_x32(pinnedBuffer.AddrOfPinnedObject(), buffer.Length);
+        public void Dispose()
+        {
+            pinnedBuffer.Free();
+        }
+
+        public IntPtr LoadNativeContext()
+        {
+            if (Environment.Is64BitProcess)
+            {
+                return NativeMethods.whisper_init_from_buffer_no_state_x64(pinnedBuffer.AddrOfPinnedObject(), buffer.Length);
+            }
+
+            return NativeMethods.whisper_init_from_buffer_no_state_x32(pinnedBuffer.AddrOfPinnedObject(), buffer.Length);
+        }
     }
 }

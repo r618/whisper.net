@@ -2,16 +2,17 @@
 
 using Whisper.net.Native;
 
-namespace Whisper.net.SamplingStrategy;
-
-internal class BeamSearchSamplingStrategy : IWhisperSamplingStrategy
+namespace Whisper.net.SamplingStrategy
 {
-    public WhisperSamplingStrategy GetNativeStrategy()
+    internal class BeamSearchSamplingStrategy : IWhisperSamplingStrategy
     {
-        return WhisperSamplingStrategy.StrategyBeamSearch;
+        public WhisperSamplingStrategy GetNativeStrategy()
+        {
+            return WhisperSamplingStrategy.StrategyBeamSearch;
+        }
+
+        public int? BeamSize { get; set; }
+
+        public float? Patience { get; set; }
     }
-
-    public int? BeamSize { get; set; }
-
-    public float? Patience { get; set; }
 }

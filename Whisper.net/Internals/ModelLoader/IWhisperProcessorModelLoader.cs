@@ -1,8 +1,11 @@
 // Licensed under the MIT license: https://opensource.org/licenses/MIT
 
-namespace Whisper.net.Internals.ModelLoader;
+using System;
 
-internal interface IWhisperProcessorModelLoader : IDisposable
+namespace Whisper.net.Internals.ModelLoader
 {
-    public IntPtr LoadNativeContext();
+    internal interface IWhisperProcessorModelLoader : IDisposable
+    {
+        public IntPtr LoadNativeContext();
+    }
 }

@@ -2,9 +2,10 @@
 
 using Whisper.net.Native;
 
-namespace Whisper.net.SamplingStrategy;
-
-internal interface IWhisperSamplingStrategy
+namespace Whisper.net.SamplingStrategy
 {
-    public WhisperSamplingStrategy GetNativeStrategy();
+    internal interface IWhisperSamplingStrategy
+    {
+        public WhisperSamplingStrategy GetNativeStrategy();
+    }
 }

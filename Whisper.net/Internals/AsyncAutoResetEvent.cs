@@ -1,38 +1,44 @@
 // Licensed under the MIT license: https://opensource.org/licenses/MIT
 
-namespace Whisper.net.Internals;
+using System.Threading;
+using System.Threading.Tasks;
 
-internal class AsyncAutoResetEvent
+namespace Whisper.net.Internals
 {
-    private static readonly Task Completed = Task.CompletedTask;
-    private TaskCompletionSource<bool>? waitTcs;
-    private int isSignaled; // 0 for false, 1 for true
-
-    public Task WaitAsync()
+    internal class AsyncAutoResetEvent
     {
-        if (Interlocked.CompareExchange(ref isSignaled, 0, 1) == 1)
-        {
-            return Completed;
-        }
-        else
-        {
-            var tcs = new TaskCompletionSource<bool>();
-            var oldTcs = Interlocked.Exchange(ref waitTcs, tcs);
-            oldTcs?.TrySetCanceled();
-            return tcs.Task;
-        }
-    }
+        private static readonly Task Completed = Task.CompletedTask;
+#nullable enable
+        private TaskCompletionSource<bool>? waitTcs;
+#nullable restore
+        private int isSignaled; // 0 for false, 1 for true
 
-    public void Set()
-    {
-        var toRelease = Interlocked.Exchange(ref waitTcs, null);
-        if (toRelease != null)
+        public Task WaitAsync()
         {
-            toRelease.SetResult(true);
+            if (Interlocked.CompareExchange(ref isSignaled, 0, 1) == 1)
+            {
+                return Completed;
+            }
+            else
+            {
+                var tcs = new TaskCompletionSource<bool>();
+                var oldTcs = Interlocked.Exchange(ref waitTcs, tcs);
+                oldTcs?.TrySetCanceled();
+                return tcs.Task;
+            }
         }
-        else
+
+        public void Set()
         {
-            Interlocked.Exchange(ref isSignaled, 1);
+            var toRelease = Interlocked.Exchange(ref waitTcs, null);
+            if (toRelease != null)
+            {
+                toRelease.SetResult(true);
+            }
+            else
+            {
+                Interlocked.Exchange(ref isSignaled, 1);
+            }
         }
     }
 }
