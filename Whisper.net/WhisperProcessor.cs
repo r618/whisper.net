@@ -13,7 +13,7 @@ using Whisper.net.SamplingStrategy;
 
 namespace Whisper.net
 {
-    public sealed class WhisperProcessor : IDisposable
+    public sealed class WhisperProcessor : IAsyncDisposable, IDisposable
     {
         private const byte trueByte = 1;
         private const byte falseByte = 0;
@@ -21,11 +21,13 @@ namespace Whisper.net
         private readonly IntPtr currentWhisperContext;
         private static WhisperProcessorOptions options;
         private readonly List<GCHandle> gcHandles = new();
+        private readonly SemaphoreSlim processingSemaphore;
         private WhisperFullParams whisperParams;
         private IntPtr? language;
-        private IntPtr? initialPrompt;
         private IntPtr? initialPromptText;
+        private bool isDisposed = false;
         private static int segmentIndex;
+        private static CancellationToken? currentCancellationToken = null;
 
         internal WhisperProcessor(WhisperProcessorOptions options)
         {
@@ -33,6 +35,7 @@ namespace Whisper.net
             segmentIndex = 0;
             currentWhisperContext = options.ContextHandle;
             whisperParams = GetWhisperParams();
+            processingSemaphore = new(1);
         }
 
 #nullable enable
@@ -117,16 +120,24 @@ namespace Whisper.net
         */
         public unsafe void Process(float[] samples)
         {
+            if (isDisposed)
+            {
+                throw new ObjectDisposedException("This processor has already been disposed.");
+            }
+
             fixed (float* pData = samples)
             {
+
                 var state = NativeMethods.whisper_init_state(currentWhisperContext);
                 try
                 {
+                    processingSemaphore.Wait();
                     NativeMethods.whisper_full_with_state(currentWhisperContext, state, whisperParams, (IntPtr)pData, samples.Length);
                 }
                 finally
                 {
                     NativeMethods.whisper_free_state(state);
+                    processingSemaphore.Release();
                 }
             }
         }
@@ -156,6 +167,7 @@ namespace Whisper.net
 
             try
             {
+                currentCancellationToken = cancellationToken;
                 var whisperTask = ProcessInternalAsync(samples)
                     .ContinueWith(_ => resetEvent.Set(), cancellationToken);
 
@@ -190,14 +202,14 @@ namespace Whisper.net
 
         public void Dispose()
         {
+            if (processingSemaphore.CurrentCount == 0)
+            {
+                throw new Exception("Cannot dispose while processing, please use DisposeAsync instead.");
+            }
+
             if (language.HasValue)
             {
                 Marshal.FreeHGlobal(language.Value);
-            }
-
-            if (initialPrompt.HasValue)
-            {
-                Marshal.FreeHGlobal(initialPrompt.Value);
             }
 
             if (initialPromptText.HasValue)
@@ -209,14 +221,20 @@ namespace Whisper.net
             {
                 gcHandle.Free();
             }
+            isDisposed = true;
         }
 
         private unsafe Task ProcessInternalAsync(float[] samples)
         {
+            if (isDisposed)
+            {
+                throw new ObjectDisposedException("This processor has already been disposed.");
+            }
             return Task.Run(() =>
             {
                 fixed (float* pData = samples)
                 {
+                    processingSemaphore.Wait();
                     var state = NativeMethods.whisper_init_state(currentWhisperContext);
                     try
                     {
@@ -225,6 +243,7 @@ namespace Whisper.net
                     finally
                     {
                         NativeMethods.whisper_free_state(state);
+                        processingSemaphore.Release();
                     }
                 }
             });
@@ -287,11 +306,6 @@ namespace Whisper.net
                 whisperParams.PrintResults = options.PrintResults.Value ? trueByte : falseByte;
             }
 
-            if (options.PrintTimestamps.HasValue)
-            {
-                whisperParams.PrintTimestamps = options.PrintTimestamps.Value ? trueByte : falseByte;
-            }
-
             if (options.UseTokenTimestamps.HasValue)
             {
                 whisperParams.UseTokenTimestamps = options.UseTokenTimestamps.Value ? trueByte : falseByte;
@@ -337,17 +351,8 @@ namespace Whisper.net
                 var tokenMaxLength = options.Prompt!.Length + 1;
 
                 initialPromptText = Marshal.StringToHGlobalAnsi(options.Prompt);
-                initialPrompt = Marshal.AllocHGlobal(tokenMaxLength);
 
-                var tokens = NativeMethods.whisper_tokenize(currentWhisperContext, initialPromptText.Value, initialPrompt.Value, tokenMaxLength);
-
-                if (tokens == -1)
-                {
-                    throw new ApplicationException("Cannot tokenize prompt text.");
-                }
-
-                whisperParams.PromptTokens = initialPrompt.Value;
-                whisperParams.PromptNTokens = tokens;
+                whisperParams.InitialPrompt = initialPromptText.Value;
             }
 
             if (options.Language != null)
@@ -425,6 +430,13 @@ namespace Whisper.net
             whisperParams.OnNewSegment = Marshal.GetFunctionPointerForDelegate(newSegmentCallback);
             whisperParams.OnEncoderBegin = Marshal.GetFunctionPointerForDelegate(whisperEncoderBeginCallback);
 
+            if (options.OnProgressHandlers.Count > 0)
+            {
+                var whisperProgressCallback = new WhisperProgressCallback(OnProgress);
+                gcHandles.Add(GCHandle.Alloc(whisperProgressCallback));
+                whisperParams.OnProgressCallback = Marshal.GetFunctionPointerForDelegate(whisperProgressCallback);
+            }
+
             return whisperParams;
         }
 #nullable enable
@@ -441,9 +453,31 @@ namespace Whisper.net
             var language = Marshal.PtrToStringAnsi(languagePtr);
             return language;
         }
+        [AOT.MonoPInvokeCallback(typeof(WhisperProgressCallback))]
+        static void OnProgress(IntPtr ctx, IntPtr state, int progress, IntPtr user_data)
+        {
+            if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
+            {
+                return;
+            }
+
+            foreach (var handler in options.OnProgressHandlers)
+            {
+                handler?.Invoke(progress);
+                if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
+                {
+                    return;
+                }
+            }
+        }
         [AOT.MonoPInvokeCallback(typeof(WhisperEncoderBeginCallback))]
         static bool OnEncoderBegin(IntPtr ctx, IntPtr state, IntPtr user_data)
         {
+            if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
+            {
+                return false;
+            }
+
             var encoderBeginArgs = new EncoderBeginData();
             foreach (var handler in options.OnEncoderBeginEventHandlers)
             {
@@ -458,6 +492,11 @@ namespace Whisper.net
         [AOT.MonoPInvokeCallback(typeof(WhisperNewSegmentCallback))]
         static void OnNewSegment(IntPtr ctx, IntPtr state, int n_new, IntPtr user_data)
         {
+            if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
+            {
+                return;
+            }
+
             var segments = NativeMethods.whisper_full_n_segments_from_state(state);
 
             while (segmentIndex < segments)
@@ -504,6 +543,10 @@ namespace Whisper.net
                     foreach (var handler in options.OnSegmentEventHandlers)
                     {
                         handler?.Invoke(eventHandlerArgs);
+                        if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
+                        {
+                            return;
+                        }
                     }
                 }
 
@@ -513,9 +556,8 @@ namespace Whisper.net
 
         private static string StringFromNativeUtf8(IntPtr nativeUtf8)
         {
-
 #if NETSTANDARD2_1_OR_GREATER
-        return Marshal.PtrToStringUTF8(nativeUtf8);
+            return Marshal.PtrToStringUTF8(nativeUtf8);
 #else
             var len = 0;
 
@@ -528,6 +570,14 @@ namespace Whisper.net
             Marshal.Copy(nativeUtf8, buffer, 0, buffer.Length);
             return System.Text.Encoding.UTF8.GetString(buffer);
 #endif
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            // If a processing is still running, wait for it to finish
+            await processingSemaphore.WaitAsync();
+            processingSemaphore.Release();
+            Dispose();
         }
     }
 }

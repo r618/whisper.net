@@ -4,6 +4,8 @@ using System;
 
 namespace Whisper.net
 {
+    public delegate void OnProgressHandler(int progress);
+
     public delegate void OnSegmentEventHandler(SegmentData e);
 
     public delegate bool OnEncoderBeginEventHandler(EncoderBeginData e);

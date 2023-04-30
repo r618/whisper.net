@@ -70,9 +70,11 @@ namespace Whisper.net
 
         public float? NoSpeechThreshold { get; set; }
 
-        public List<OnSegmentEventHandler> OnSegmentEventHandlers { get; set; } = new List<OnSegmentEventHandler> { };
+        public List<OnSegmentEventHandler> OnSegmentEventHandlers { get; set; } = new();
 
-        public List<OnEncoderBeginEventHandler> OnEncoderBeginEventHandlers { get; set; } = new List<OnEncoderBeginEventHandler> { };
+        public List<OnProgressHandler> OnProgressHandlers { get; set; } = new();
+
+        public List<OnEncoderBeginEventHandler> OnEncoderBeginEventHandlers { get; set; } = new();
         public bool ComputeProbabilities { get; set; }
     }
 }

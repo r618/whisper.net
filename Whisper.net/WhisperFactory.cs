@@ -18,8 +18,18 @@ namespace Whisper.net
         private readonly Lazy<IntPtr> contextLazy;
         private bool wasDisposed = false;
 
+        //private static readonly Lazy<LoadResult> libraryLoaded = new(() =>
+        //{
+        //    return NativeLibraryLoader.LoadNativeLibrary();
+        //}, true);
+
         private WhisperFactory(IWhisperProcessorModelLoader loader, bool delayInit)
         {
+            //if (!libraryLoaded.Value.IsSuccess)
+            //{
+            //    throw new Exception($"Failed to load native whisper library. Error: {libraryLoaded.Value.ErrorMessage}");
+            //}
+
             this.loader = loader;
             if (!delayInit)
             {
