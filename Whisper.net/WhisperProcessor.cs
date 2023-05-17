@@ -454,7 +454,7 @@ namespace Whisper.net
             return language;
         }
         [AOT.MonoPInvokeCallback(typeof(WhisperProgressCallback))]
-        private void OnProgress(IntPtr ctx, IntPtr state, int progress, IntPtr user_data)
+        private static void OnProgress(IntPtr ctx, IntPtr state, int progress, IntPtr user_data)
         {
             if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
             {
@@ -471,7 +471,7 @@ namespace Whisper.net
             }
         }
         [AOT.MonoPInvokeCallback(typeof(WhisperEncoderBeginCallback))]
-        private bool OnEncoderBegin(IntPtr ctx, IntPtr state, IntPtr user_data)
+        private static bool OnEncoderBegin(IntPtr ctx, IntPtr state, IntPtr user_data)
         {
             if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
             {
@@ -490,7 +490,7 @@ namespace Whisper.net
             return true;
         }
         [AOT.MonoPInvokeCallback(typeof(WhisperNewSegmentCallback))]
-        private void OnNewSegment(IntPtr ctx, IntPtr state, int n_new, IntPtr user_data)
+        private static void OnNewSegment(IntPtr ctx, IntPtr state, int n_new, IntPtr user_data)
         {
             if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
             {
