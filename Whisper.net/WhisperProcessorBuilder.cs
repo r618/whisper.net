@@ -116,7 +116,7 @@ namespace Whisper.net
         }
 
         /// <summary>
-        /// Configures the processor to print special tokens (e.g. <SOT>, <EOT>, <BEG>, etc.)
+        /// Configures the processor to print special tokens (e.g. &lt;SOT&gt;, &lt;EOT&gt;, &lt;BEG&gt;, etc.)
         /// </summary>
         /// <returns>An instance to the same builder.</returns>
         /// <remarks>
@@ -199,7 +199,7 @@ namespace Whisper.net
         /// <summary>
         /// Configures the processor to use the specified SUM probability threshold for token timestamps.
         /// </summary>
-        /// <param name="tokenTimestampsThreshold">Probability SUM threshold to be used for token-level timestamps.</param>
+        /// <param name="tokenTimestampsSumThreshold">Probability SUM threshold to be used for token-level timestamps.</param>
         /// <returns>An instance to the same builder.</returns>
         /// <remarks>
         /// Default value is 0.01f.
@@ -226,12 +226,11 @@ namespace Whisper.net
         }
 
         /// <summary>
-        /// Configures the processor to use a maximum segment length.
+        /// Configures the processor to split on each word.
         /// </summary>
-        /// <param name="maxSegmentLength">The maximum segment length to be used</param>
         /// <returns>An instance to the same builder.</returns>
         /// <remarks>
-        /// If not specified no max segment length will be applied.
+        /// If not specified split will be done based on the model configuration.
         /// </remarks>
         public WhisperProcessorBuilder SplitOnWord()
         {
@@ -459,7 +458,7 @@ namespace Whisper.net
         /// <summary>
         /// Adds a <seealso cref="OnEncoderBeginEventHandler"/> which will be called when encoder will begin.
         /// </summary>
-        /// <param name="segmentEventHandler">The event handler to be added.</param>
+        /// <param name="encoderBeginEventHandler">The event handler to be added.</param>
         /// <returns>An instance to the same builder.</returns>
         public WhisperProcessorBuilder WithEncoderBeginHandler(OnEncoderBeginEventHandler encoderBeginEventHandler)
         {
@@ -490,7 +489,7 @@ namespace Whisper.net
         }
 
         /// <summary>
-        /// Confiugres the processor to return probabilities during segment decoding <seealso cref="SegmentData.MaxProbability"/>, <seealso cref="SegmentData.MinProbability"/> and <seealso cref="SegmentData.AverageProbability"/>.
+        /// Confiugres the processor to return probabilities during segment decoding <seealso cref="SegmentData.MaxProbability"/>, <seealso cref="SegmentData.MinProbability"/> and <seealso cref="SegmentData.Probability"/>.
         /// </summary>
         /// <returns>An instance to the same builder.</returns>
         public WhisperProcessorBuilder WithProbabilities()
@@ -503,7 +502,6 @@ namespace Whisper.net
         /// Builds the processor.
         /// </summary>
         /// <returns>The <seealso cref="WhisperProcessor"/> build with these configs.</returns>
-        /// <exception cref="InvalidOperationException">If not model is configured using <seealso cref="WithFileModel(string)"/> or <seealso cref="WithBufferedModel(byte[])"/>, InvalidOperationException is thrown.</exception>
         public WhisperProcessor Build()
         {
             return new WhisperProcessor(whisperProcessorOptions);

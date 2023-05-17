@@ -16,15 +16,22 @@ namespace Whisper.net
     {
         private readonly IWhisperProcessorModelLoader loader;
         private readonly Lazy<IntPtr> contextLazy;
-        private bool wasDisposed = false;
-
+        private bool wasDisposed;
+        private static bool bypassLoading;
+#nullable enable
+        private static string? libraryPath;
+#nullable restore
         //private static readonly Lazy<LoadResult> libraryLoaded = new(() =>
         //{
-        //    return NativeLibraryLoader.LoadNativeLibrary();
+        //    return NativeLibraryLoader.LoadNativeLibrary(WhisperFactory.libraryPath, WhisperFactory.bypassLoading);
         //}, true);
-
-        private WhisperFactory(IWhisperProcessorModelLoader loader, bool delayInit)
+#nullable enable
+        private WhisperFactory(IWhisperProcessorModelLoader loader, bool delayInit, string? libraryPath = default, bool bypassLoading = false)
+#nullable restore
         {
+            WhisperFactory.libraryPath = libraryPath;
+            WhisperFactory.bypassLoading = bypassLoading;
+
             //if (!libraryLoaded.Value.IsSuccess)
             //{
             //    throw new Exception($"Failed to load native whisper library. Error: {libraryLoaded.Value.ErrorMessage}");
@@ -47,13 +54,17 @@ namespace Whisper.net
         /// </summary>
         /// <param name="path">The path to the model.</param>
         /// <param name="delayInitialization">A value indicating if the model should be loaded right away or during the first <see cref="CreateBuilder"/> call.</param>
+        /// <param name="libraryPath">The path to the library</param>
+        /// <param name="bypassLoading">Bypass loading the library. Use this if you've already loaded the library through other means.</param>
         /// <returns>An instance to the same builder.</returns>
         /// <remarks>
         /// If you don't know where to find a ggml model, you can use <seealso cref="Ggml.WhisperGgmlDownloader"/> which is downloading a model from huggingface.co.
         /// </remarks>
-        public static WhisperFactory FromPath(string path, bool delayInitialization = false)
+#nullable enable
+        public static WhisperFactory FromPath(string path, bool delayInitialization = false, string? libraryPath = default, bool bypassLoading = false)
+#nullable restore
         {
-            return new WhisperFactory(new WhisperProcessorModelFileLoader(path), delayInitialization);
+            return new WhisperFactory(new WhisperProcessorModelFileLoader(path), delayInitialization, libraryPath, bypassLoading);
         }
 
         /// <summary>
@@ -61,13 +72,17 @@ namespace Whisper.net
         /// </summary>
         /// <param name="buffer">The buffer with the model.</param>
         /// <param name="delayInitialization">A value indicating if the model should be loaded right away or during the first <see cref="CreateBuilder"/> call.</param>
+        /// <param name="libraryPath">The path to the library</param>
+        /// <param name="bypassLoading">Bypass loading the library. Use this if you've already loaded the library though other means.</param>
         /// <returns>An instance to the same builder.</returns>
         /// <remarks>
         /// If you don't know where to find a ggml model, you can use <seealso cref="Ggml.WhisperGgmlDownloader"/> which is downloading a model from huggingface.co.
         /// </remarks>
-        public static WhisperFactory FromBuffer(byte[] buffer, bool delayInitialization = false)
+#nullable enable
+        public static WhisperFactory FromBuffer(byte[] buffer, bool delayInitialization = false, string? libraryPath = default, bool bypassLoading = false)
+#nullable restore
         {
-            return new WhisperFactory(new WhisperProcessorModelBufferLoader(buffer), delayInitialization);
+            return new WhisperFactory(new WhisperProcessorModelBufferLoader(buffer), delayInitialization, libraryPath, bypassLoading);
         }
 
         /// <summary>
