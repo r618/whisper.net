@@ -15,29 +15,36 @@ namespace Whisper.net
 {
     public sealed class WhisperProcessor : IAsyncDisposable, IDisposable
     {
+        private static readonly ConcurrentDictionary<long, WhisperProcessor> processorInstances = new();
+        private static long currentProcessorId;
         private const byte trueByte = 1;
         private const byte falseByte = 0;
 
         private readonly IntPtr currentWhisperContext;
-        private static WhisperProcessorOptions options;
+        private readonly WhisperProcessorOptions options;
         private readonly List<GCHandle> gcHandles = new();
         private readonly SemaphoreSlim processingSemaphore;
         private WhisperFullParams whisperParams;
         private IntPtr? language;
         private IntPtr? initialPromptText;
         private bool isDisposed;
-        private static int segmentIndex;
-        private static CancellationToken? currentCancellationToken;
+        private int segmentIndex;
+        private CancellationToken? currentCancellationToken;
+
+        // Id is used to identify the current instance when calling the callbacks from C++
+        private readonly long myId;
 
         internal WhisperProcessor(WhisperProcessorOptions options)
         {
-            WhisperProcessor.options = options;
-            WhisperProcessor.segmentIndex = 0;
+            this.options = options;
+            myId = Interlocked.Increment(ref currentProcessorId);
+
+            processorInstances[myId] = this;
+
             currentWhisperContext = options.ContextHandle;
             whisperParams = GetWhisperParams();
             processingSemaphore = new(1);
         }
-
 #nullable enable
         public void ChangeLanguage(string? newLanguage)
 #nullable restore
@@ -62,16 +69,20 @@ namespace Whisper.net
             whisperParams = newParams;
         }
 #nullable enable
-
         public unsafe string? DetectLanguage(float[] samples, bool speedUp = false)
 #nullable restore
         {
-            var (language, _) = DetectLanguageWithProbability(samples, speedUp);
+            var (language, _) = DetectLanguageWithProbability(samples.AsSpan(), speedUp);
             return language;
         }
 #nullable enable
-
-        public unsafe (string? language, float probability) DetectLanguageWithProbability(float[] samples, bool speedUp = false)
+        public (string? language, float probability) DetectLanguageWithProbability(float[] samples, bool speedUp = false)
+#nullable restore
+        {
+            return DetectLanguageWithProbability(samples.AsSpan(), speedUp);
+        }
+#nullable enable
+        public unsafe (string? language, float probability) DetectLanguageWithProbability(ReadOnlySpan<float> samples, bool speedUp = false)
 #nullable restore
         {
             var probs = new float[NativeMethods.whisper_lang_max_id()];
@@ -118,7 +129,12 @@ namespace Whisper.net
             Process(samples);
         }
         */
-        public unsafe void Process(float[] samples)
+        public void Process(float[] samples)
+        {
+            Process(samples.AsSpan());
+        }
+
+        public unsafe void Process(ReadOnlySpan<float> samples)
         {
             if (isDisposed)
             {
@@ -132,6 +148,8 @@ namespace Whisper.net
                 try
                 {
                     processingSemaphore.Wait();
+                    segmentIndex = 0;
+
                     NativeMethods.whisper_full_with_state(currentWhisperContext, state, whisperParams, (IntPtr)pData, samples.Length);
                 }
                 finally
@@ -152,7 +170,7 @@ namespace Whisper.net
             }
         }
         */
-        public async IAsyncEnumerable<SegmentData> ProcessAsync(float[] samples, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<SegmentData> ProcessAsync(ReadOnlyMemory<float> samples, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var resetEvent = new AsyncAutoResetEvent();
             var buffer = new ConcurrentQueue<SegmentData>();
@@ -163,10 +181,10 @@ namespace Whisper.net
                 resetEvent!.Set();
             }
 
-            options.OnSegmentEventHandlers.Add(OnSegmentHandler);
-
             try
             {
+                options.OnSegmentEventHandlers.Add(OnSegmentHandler);
+
                 currentCancellationToken = cancellationToken;
                 var whisperTask = ProcessInternalAsync(samples, cancellationToken)
                     .ContinueWith(_ => resetEvent.Set(), cancellationToken, TaskContinuationOptions.None, TaskScheduler.Default);
@@ -200,6 +218,11 @@ namespace Whisper.net
             }
         }
 
+        public IAsyncEnumerable<SegmentData> ProcessAsync(float[] samples, CancellationToken cancellationToken = default)
+        {
+            return ProcessAsync(samples.AsMemory(), cancellationToken);
+        }
+
         public void Dispose()
         {
             if (processingSemaphore.CurrentCount == 0)
@@ -207,24 +230,28 @@ namespace Whisper.net
                 throw new Exception("Cannot dispose while processing, please use DisposeAsync instead.");
             }
 
+            processorInstances.TryRemove(myId, out _);
             if (language.HasValue)
             {
                 Marshal.FreeHGlobal(language.Value);
+                language = null;
             }
 
             if (initialPromptText.HasValue)
             {
                 Marshal.FreeHGlobal(initialPromptText.Value);
+                initialPromptText = null;
             }
 
             foreach (var gcHandle in gcHandles)
             {
                 gcHandle.Free();
             }
+            gcHandles.Clear();
             isDisposed = true;
         }
 
-        private unsafe Task ProcessInternalAsync(float[] samples, CancellationToken cancellationToken)
+        private unsafe Task ProcessInternalAsync(ReadOnlyMemory<float> samples, CancellationToken cancellationToken)
         {
             if (isDisposed)
             {
@@ -232,10 +259,13 @@ namespace Whisper.net
             }
             return Task.Factory.StartNew(() =>
             {
-                fixed (float* pData = samples)
+                fixed (float* pData = samples.Span)
                 {
                     processingSemaphore.Wait();
+                    segmentIndex = 0;
+
                     var state = NativeMethods.whisper_init_state(currentWhisperContext);
+
                     try
                     {
                         NativeMethods.whisper_full_with_state(currentWhisperContext, state, whisperParams, (IntPtr)pData, samples.Length);
@@ -252,8 +282,9 @@ namespace Whisper.net
         private WhisperFullParams GetWhisperParams()
         {
             var strategy = options.SamplingStrategy.GetNativeStrategy();
-            var whisperParams = NativeMethods.whisper_full_default_params(strategy);
-
+            var whisperParamsRef = NativeMethods.whisper_full_default_params_by_ref(strategy);
+            var whisperParams = Marshal.PtrToStructure<WhisperFullParams>(whisperParamsRef);
+            NativeMethods.whisper_free_params(whisperParamsRef);
             whisperParams.Strategy = strategy;
 
             if (options.Threads.HasValue)
@@ -421,21 +452,47 @@ namespace Whisper.net
                 }
             }
 
-            var newSegmentCallback = new WhisperNewSegmentCallback(OnNewSegment);
-            var whisperEncoderBeginCallback = new WhisperEncoderBeginCallback(OnEncoderBegin);
+            var myIntPtrId = new IntPtr(myId);
+            whisperParams.OnNewSegmentUserData = myIntPtrId;
+            whisperParams.OnEncoderBeginUserData = myIntPtrId;
 
-            // Creates GCHandles for the delegates so they won't be GC before the processor.
-            gcHandles.Add(GCHandle.Alloc(newSegmentCallback));
-            gcHandles.Add(GCHandle.Alloc(whisperEncoderBeginCallback));
-            whisperParams.OnNewSegment = Marshal.GetFunctionPointerForDelegate(newSegmentCallback);
-            whisperParams.OnEncoderBegin = Marshal.GetFunctionPointerForDelegate(whisperEncoderBeginCallback);
+#if NET6_0_OR_GREATER
+        unsafe
+        {
+            delegate* unmanaged[Cdecl]<IntPtr, IntPtr, int, IntPtr, void> onNewSegmentDelegate = &OnNewSegmentStatic;
+            whisperParams.OnNewSegment = (IntPtr)onNewSegmentDelegate;
+
+            delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, byte> onEncoderBeginDelegate = &OnEncoderBeginStatic;
+            whisperParams.OnEncoderBegin = (IntPtr)onEncoderBeginDelegate;
 
             if (options.OnProgressHandlers.Count > 0)
             {
-                var whisperProgressCallback = new WhisperProgressCallback(OnProgress);
-                gcHandles.Add(GCHandle.Alloc(whisperProgressCallback));
-                whisperParams.OnProgressCallback = Marshal.GetFunctionPointerForDelegate(whisperProgressCallback);
+                delegate* unmanaged[Cdecl]<IntPtr, IntPtr, int, IntPtr, void> onProgressDelegate = &OnProgressStatic;
+                whisperParams.OnProgressCallback = (IntPtr)onProgressDelegate;
+                whisperParams.OnProgressCallbackUserData = myIntPtrId;
             }
+        }
+#else
+            // For netframework, we don't have `UnmanagedCallersOnlyAttribute` so we need to use a delegate wrapped with a GC handle
+            var onNewSegmentDelegate = new WhisperNewSegmentCallback(OnNewSegmentStatic);
+            var gcHandle = GCHandle.Alloc(onNewSegmentDelegate);
+            gcHandles.Add(gcHandle);
+            whisperParams.OnNewSegment = Marshal.GetFunctionPointerForDelegate(onNewSegmentDelegate);
+
+            var onEncoderBeginDelegate = new WhisperEncoderBeginCallback(OnEncoderBeginStatic);
+            gcHandle = GCHandle.Alloc(onEncoderBeginDelegate);
+            gcHandles.Add(gcHandle);
+            whisperParams.OnEncoderBegin = Marshal.GetFunctionPointerForDelegate(onEncoderBeginDelegate);
+
+            if (options.OnProgressHandlers.Count > 0)
+            {
+                var onProgressDelegate = new WhisperProgressCallback(OnProgressStatic);
+                gcHandle = GCHandle.Alloc(onProgressDelegate);
+                gcHandles.Add(gcHandle);
+                whisperParams.OnProgressCallback = Marshal.GetFunctionPointerForDelegate(onProgressDelegate);
+                whisperParams.OnProgressCallbackUserData = myIntPtrId;
+            }
+#endif
 
             return whisperParams;
         }
@@ -453,8 +510,47 @@ namespace Whisper.net
             var language = Marshal.PtrToStringAnsi(languagePtr);
             return language;
         }
+
+#if NET6_0_OR_GREATER
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+#endif
+        [AOT.MonoPInvokeCallback(typeof(WhisperNewSegmentCallback))]
+        private static void OnNewSegmentStatic(IntPtr ctx, IntPtr state, int nNew, IntPtr userData)
+        {
+            if (!processorInstances.TryGetValue(userData.ToInt64(), out var processor))
+            {
+                throw new Exception("Couldn't find processor instance for user data");
+            }
+            processor.OnNewSegment(state);
+        }
+
+#if NET6_0_OR_GREATER
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+#endif
+        [AOT.MonoPInvokeCallback(typeof(WhisperEncoderBeginCallback))]
+        private static byte OnEncoderBeginStatic(IntPtr ctx, IntPtr state, IntPtr userData)
+        {
+            if (!processorInstances.TryGetValue(userData.ToInt64(), out var processor))
+            {
+                throw new Exception("Couldn't find processor instance for user data");
+            }
+            return processor.OnEncoderBegin() ? trueByte : falseByte;
+        }
+
+#if NET6_0_OR_GREATER
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+#endif
         [AOT.MonoPInvokeCallback(typeof(WhisperProgressCallback))]
-        private static void OnProgress(IntPtr ctx, IntPtr state, int progress, IntPtr user_data)
+        private static void OnProgressStatic(IntPtr ctx, IntPtr state, int progress, IntPtr userData)
+        {
+            if (!processorInstances.TryGetValue(userData.ToInt64(), out var processor))
+            {
+                throw new Exception("Couldn't find processor instance for user data");
+            }
+            processor.OnProgress(progress);
+        }
+
+        private void OnProgress(int progress)
         {
             if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
             {
@@ -470,8 +566,8 @@ namespace Whisper.net
                 }
             }
         }
-        [AOT.MonoPInvokeCallback(typeof(WhisperEncoderBeginCallback))]
-        private static bool OnEncoderBegin(IntPtr ctx, IntPtr state, IntPtr user_data)
+
+        private bool OnEncoderBegin()
         {
             if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
             {
@@ -489,8 +585,8 @@ namespace Whisper.net
             }
             return true;
         }
-        [AOT.MonoPInvokeCallback(typeof(WhisperNewSegmentCallback))]
-        private static void OnNewSegment(IntPtr ctx, IntPtr state, int n_new, IntPtr user_data)
+
+        private void OnNewSegment(IntPtr state)
         {
             if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
             {
@@ -556,6 +652,7 @@ namespace Whisper.net
 
         private static string StringFromNativeUtf8(IntPtr nativeUtf8)
         {
+
 #if NETSTANDARD2_1_OR_GREATER
             return Marshal.PtrToStringUTF8(nativeUtf8);
 #else

@@ -17,26 +17,26 @@ namespace Whisper.net.Native
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern IntPtr whisper_init_from_file(string path);
 
-        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "whisper_init_from_buffer", CharSet = CharSet.Ansi)]
-        public static extern IntPtr whisper_init_from_buffer_x64(IntPtr buffer, long buffer_size);
-
-        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "whisper_init_from_buffer", CharSet = CharSet.Ansi)]
-        public static extern IntPtr whisper_init_from_buffer_x32(IntPtr buffer, int buffer_size);
+        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern IntPtr whisper_init_from_buffer(IntPtr buffer, UIntPtr buffer_size);
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern IntPtr whisper_init_from_file_no_state(string path);
 
-        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "whisper_init_from_buffer_no_state", CharSet = CharSet.Ansi)]
-        public static extern IntPtr whisper_init_from_buffer_no_state_x64(IntPtr buffer, long buffer_size);
-
-        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "whisper_init_from_buffer_no_state", CharSet = CharSet.Ansi)]
-        public static extern IntPtr whisper_init_from_buffer_no_state_x32(IntPtr buffer, int buffer_size);
+        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern IntPtr whisper_init_from_buffer_no_state(IntPtr buffer, UIntPtr buffer_size);
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern void whisper_free(IntPtr context);
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern void whisper_free_params(IntPtr paramsPtr);
+
+        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern WhisperFullParams whisper_full_default_params(WhisperSamplingStrategy strategy);
+
+        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern IntPtr whisper_full_default_params_by_ref(WhisperSamplingStrategy strategy);
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern int whisper_full(IntPtr context, WhisperFullParams parameters, IntPtr samples, int nSamples);
@@ -65,6 +65,10 @@ namespace Whisper.net.Native
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern float whisper_full_get_token_p_from_state(IntPtr state, int segmentIndex, int tokenIndex);
 
+        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool whisper_full_get_segment_speaker_turn_next(IntPtr ctx, int iSegment);
+
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern int whisper_tokenize(IntPtr context, IntPtr text, IntPtr tokens, int nMaxTokens);
 
@@ -88,6 +92,9 @@ namespace Whisper.net.Native
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern IntPtr whisper_init_state(IntPtr context);
+
+        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern IntPtr whisper_ctx_init_openvino_encoder(IntPtr context, string path, string device, string cacheDir);
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern void whisper_free_state(IntPtr state);

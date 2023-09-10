@@ -31,7 +31,7 @@ namespace Whisper.net.Native
     internal delegate void WhisperNewSegmentCallback(IntPtr ctx, IntPtr state, int n_new, IntPtr user_data);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    internal delegate bool WhisperEncoderBeginCallback(IntPtr ctx, IntPtr state, IntPtr user_data);
+    internal delegate byte WhisperEncoderBeginCallback(IntPtr ctx, IntPtr state, IntPtr user_data);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate void WhisperProgressCallback(IntPtr ctx, IntPtr state, int progress, IntPtr user_data);
@@ -98,8 +98,15 @@ namespace Whisper.net.Native
         // speed-up the audio by 2x using Phase Vocoder
         public byte SpeedUp2x;
 
+        // enable debug_mode provides extra info (eg. Dump log_mel)
+        public byte DebugMode;
+
         // overwrite the audio context size (0 = use default)
         public int AudioContextSize;
+
+        // [EXPERIMENTAL] [TDRZ] tinydiarize
+        // enable tinydiarize speaker turn detection
+        public byte TinyDiarizeSpeakerTurnDirection;
 
         public IntPtr InitialPrompt;
 
@@ -111,6 +118,9 @@ namespace Whisper.net.Native
 
         // for auto-detection, set to nullptr, "" or "auto"
         public IntPtr Language;
+
+        // Will end the pipeline after detecting the language. Not used by whisper.net
+        public byte DetectLanguage;
 
         // common decoding parameters:
         public byte SuppressBlank;

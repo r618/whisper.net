@@ -90,11 +90,18 @@ namespace Whisper.net
         /// </summary>
         /// <returns>An instance to a new builder.</returns>
         /// <exception cref="ObjectDisposedException">Throws if the factory was already disposed.</exception>
+        /// <exception cref="WhisperModelLoadException">Throws if the model couldn't be loaded.</exception>
         public WhisperProcessorBuilder CreateBuilder()
         {
             if (wasDisposed)
             {
                 throw new ObjectDisposedException(nameof(WhisperFactory));
+            }
+
+            var context = contextLazy.Value;
+            if (context == IntPtr.Zero)
+            {
+                throw new WhisperModelLoadException("Failed to load the whisper model.");
             }
 
             return new WhisperProcessorBuilder(contextLazy.Value);
