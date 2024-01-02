@@ -22,7 +22,7 @@ namespace Whisper.net.Logger
         public event Action<WhisperLogLevel, string?>? OnLog;
 #nullable restore
 
-        internal static void InitializeLogging()
+        public static void InitializeLogging()
         {
             IntPtr funcPointer;
 #if NET6_0_OR_GREATER
@@ -36,13 +36,18 @@ namespace Whisper.net.Logger
 #endif
             NativeMethods.whisper_log_set(funcPointer, IntPtr.Zero);
         }
+        public static void DeInitializeLogging()
+        {
+            NativeMethods.whisper_log_set(IntPtr.Zero, IntPtr.Zero);
+        }
 
 #if NET6_0_OR_GREATER
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+        [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
 #else
 
         private static readonly WhisperGgmlLogCallback logCallback = LogUnmanaged;
 #endif
+        [AOT.MonoPInvokeCallback(typeof(WhisperGgmlLogCallback))]
         internal static void LogUnmanaged(GgmlLogLevel level, IntPtr message, IntPtr user_data)
         {
             var messageString = Marshal.PtrToStringAnsi(message);
