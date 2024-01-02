@@ -75,6 +75,9 @@ namespace Whisper.net
         public List<OnProgressHandler> OnProgressHandlers { get; set; } = new();
 
         public List<OnEncoderBeginEventHandler> OnEncoderBeginEventHandlers { get; set; } = new();
+#nullable enable
+        public WhisperAbortEventHandler? WhisperAbortEventHandler { get; set; }
+#nullable restore
         public bool ComputeProbabilities { get; set; }
     }
 }

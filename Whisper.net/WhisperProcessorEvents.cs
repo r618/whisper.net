@@ -10,6 +10,8 @@ namespace Whisper.net
 
     public delegate bool OnEncoderBeginEventHandler(EncoderBeginData e);
 
+    public delegate bool WhisperAbortEventHandler();
+
     public class EncoderBeginData
     {
 

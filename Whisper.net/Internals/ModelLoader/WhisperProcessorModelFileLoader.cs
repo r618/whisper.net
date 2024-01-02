@@ -8,10 +8,12 @@ namespace Whisper.net.Internals.ModelLoader
     internal sealed class WhisperProcessorModelFileLoader : IWhisperProcessorModelLoader
     {
         private readonly string pathModel;
+        private readonly bool useGpu;
 
-        public WhisperProcessorModelFileLoader(string pathModel)
+        public WhisperProcessorModelFileLoader(string pathModel, bool useGpu)
         {
             this.pathModel = pathModel;
+            this.useGpu = useGpu;
         }
 
         public void Dispose()
@@ -21,7 +23,7 @@ namespace Whisper.net.Internals.ModelLoader
 
         public IntPtr LoadNativeContext()
         {
-            return NativeMethods.whisper_init_from_file_no_state(pathModel);
+            return NativeMethods.whisper_init_from_file_with_params_no_state(pathModel, new WhisperContextParams() { UseGpu = useGpu ? (byte)1 : (byte)0 });
         }
     }
 }

@@ -8,23 +8,17 @@ namespace Whisper.net.Native
     internal static class NativeMethods
     {
         // Needed for Apple apps when linking library.
-#if UNITY_IOS && !UNITY_EDITOR
+#if (UNITY_IOS || UNITY_TVOS) && !UNITY_EDITOR
         const string libraryName = "__Internal";
 #else
         const string libraryName = "whisper";
 #endif
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern IntPtr whisper_init_from_file(string path);
+        public static extern IntPtr whisper_init_from_file_with_params_no_state(string path, WhisperContextParams whisperContextParams);
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern IntPtr whisper_init_from_buffer(IntPtr buffer, UIntPtr buffer_size);
-
-        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern IntPtr whisper_init_from_file_no_state(string path);
-
-        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern IntPtr whisper_init_from_buffer_no_state(IntPtr buffer, UIntPtr buffer_size);
+        public static extern IntPtr whisper_init_from_buffer_with_params_no_state(IntPtr buffer, UIntPtr buffer_size, WhisperContextParams whisperContextParams);
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern void whisper_free(IntPtr context);
@@ -69,6 +63,10 @@ namespace Whisper.net.Native
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool whisper_full_get_segment_speaker_turn_next(IntPtr ctx, int iSegment);
 
+        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool whisper_full_get_segment_speaker_turn_next_from_state(IntPtr state, int iSegment);
+
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern int whisper_tokenize(IntPtr context, IntPtr text, IntPtr tokens, int nMaxTokens);
 
@@ -94,12 +92,12 @@ namespace Whisper.net.Native
         public static extern IntPtr whisper_init_state(IntPtr context);
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        public static extern IntPtr whisper_ctx_init_openvino_encoder(IntPtr context, string path, string device, string cacheDir);
-
-        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern void whisper_free_state(IntPtr state);
 
         [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern int whisper_full_lang_id_from_state(IntPtr state);
+
+        [DllImport(libraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern void whisper_log_set(IntPtr logCallback, IntPtr user_data);
     }
 }

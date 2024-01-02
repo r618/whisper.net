@@ -181,9 +181,19 @@ namespace Whisper.net
                 resetEvent!.Set();
             }
 
+            bool OnWhisperAbortHandler()
+            {
+                if (currentCancellationToken.HasValue && currentCancellationToken.Value.IsCancellationRequested)
+                {
+                    return true;
+                }
+                return false;
+            }
+
             try
             {
                 options.OnSegmentEventHandlers.Add(OnSegmentHandler);
+                options.WhisperAbortEventHandler = OnWhisperAbortHandler;
 
                 currentCancellationToken = cancellationToken;
                 var whisperTask = ProcessInternalAsync(samples, cancellationToken)
@@ -455,6 +465,7 @@ namespace Whisper.net
             var myIntPtrId = new IntPtr(myId);
             whisperParams.OnNewSegmentUserData = myIntPtrId;
             whisperParams.OnEncoderBeginUserData = myIntPtrId;
+            whisperParams.OnAbortUserData = myIntPtrId;
 
 #if NET6_0_OR_GREATER
         unsafe
@@ -464,6 +475,9 @@ namespace Whisper.net
 
             delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, byte> onEncoderBeginDelegate = &OnEncoderBeginStatic;
             whisperParams.OnEncoderBegin = (IntPtr)onEncoderBeginDelegate;
+
+            delegate* unmanaged[Cdecl]<IntPtr, byte> onWhisperAbortDelegate = &OnWhisperAbortStatic;
+            whisperParams.OnAbort = (IntPtr)onWhisperAbortDelegate;
 
             if (options.OnProgressHandlers.Count > 0)
             {
@@ -483,6 +497,11 @@ namespace Whisper.net
             gcHandle = GCHandle.Alloc(onEncoderBeginDelegate);
             gcHandles.Add(gcHandle);
             whisperParams.OnEncoderBegin = Marshal.GetFunctionPointerForDelegate(onEncoderBeginDelegate);
+
+            var onWhisperAbortDelegate = new WhisperAbortCallback(OnWhisperAbortStatic);
+            gcHandle = GCHandle.Alloc(onWhisperAbortDelegate);
+            gcHandles.Add(gcHandle);
+            whisperParams.OnAbort = Marshal.GetFunctionPointerForDelegate(onWhisperAbortDelegate);
 
             if (options.OnProgressHandlers.Count > 0)
             {
@@ -512,7 +531,22 @@ namespace Whisper.net
         }
 
 #if NET6_0_OR_GREATER
-    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+#endif
+        [AOT.MonoPInvokeCallback(typeof(WhisperAbortCallback))]
+        private static byte OnWhisperAbortStatic(IntPtr userData)
+        {
+            if (!processorInstances.TryGetValue(userData.ToInt64(), out var processor))
+            {
+                throw new Exception("Couldn't find processor instance for user data");
+            }
+
+            var shouldCancel = processor.options.WhisperAbortEventHandler?.Invoke() ?? false;
+            return shouldCancel ? trueByte : falseByte;
+        }
+
+#if NET6_0_OR_GREATER
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
 #endif
         [AOT.MonoPInvokeCallback(typeof(WhisperNewSegmentCallback))]
         private static void OnNewSegmentStatic(IntPtr ctx, IntPtr state, int nNew, IntPtr userData)
